@@ -13,12 +13,18 @@ const app = express();
 const port = process.env.PORT || 5000;
 
 const allowedOrigins = [
-  process.env.CLIENT_URL || 'https://ai-prompt-client.vercel.app',
+  'https://ai-prompt-client.vercel.app', 
+  'https://ai-prompt-sharing-server.vercel.app', 
   'http://localhost:3000',
-];
-app.use(cors({ origin: allowedOrigins, credentials: true }));
-app.use(express.json());
-app.use(cookieParser());
+  process.env.CLIENT_URL,              
+].filter(Boolean);
+
+app.use(cors({
+  origin: allowedOrigins,
+  credentials: true,        // ← এটা থাকতে হবে
+  methods: ['GET','POST','PUT','PATCH','DELETE','OPTIONS'],
+  allowedHeaders: ['Content-Type','Authorization'],
+}));
 
 const client = new MongoClient(process.env.MONGODB_URI, {
   serverApi: { version: ServerApiVersion.v1, strict: true, deprecationErrors: true },
