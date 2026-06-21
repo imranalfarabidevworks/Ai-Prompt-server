@@ -35,7 +35,7 @@ const setTokenCookie = (res, token) => {
 };
 
 // ─── Safe ObjectId helper ─────────────────────
-// id টা valid ObjectId কিনা check করে, না হলে null return করে
+
 const toObjectId = (id) => {
   try { return new ObjectId(id); } catch { return null; }
 };
@@ -71,9 +71,9 @@ async function run() {
   const reportsCol  = db.collection('reports');
   const paymentsCol = db.collection('payments');
 
-  // ══════════════════════════
+  
   // AUTH
-  // ══════════════════════════
+  
   app.post('/api/auth/register', async (req, res) => {
     try {
       const { name, email, photoURL, password } = req.body;
@@ -138,11 +138,11 @@ async function run() {
     res.json({ message: 'Logged out' });
   });
 
-  // ══════════════════════════
-  // PROMPTS
-  // ══════════════════════════
 
-  // GET all prompts — server-side search/filter/sort/pagination
+  // PROMPTS
+  
+
+  // GET all prompts
   app.get('/api/prompts', async (req, res) => {
     try {
       const { search, category, aiTool, difficulty, sort, page = 1, limit = 9 } = req.query;
@@ -177,7 +177,7 @@ async function run() {
   app.get('/api/prompts/:id', async (req, res) => {
     try {
       const oid = toObjectId(req.params.id);
-      // ObjectId দিয়ে খোঁজো, না পেলে string _id দিয়েও খোঁজো (mock data support)
+      // ObjectId
       const query = oid ? { $or: [{ _id: oid }, { _id: req.params.id }] } : { _id: req.params.id };
       const prompt = await promptsCol.findOne(oid ? { _id: oid } : { _id: req.params.id });
       if (!prompt) return res.status(404).json({ message: 'Prompt not found' });
