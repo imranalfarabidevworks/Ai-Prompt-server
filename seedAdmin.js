@@ -8,8 +8,8 @@ async function seed() {
   const db = client.db('prompthive');
   const users = db.collection('users');
 
-  const adminEmail = process.env.ADMIN_EMAIL || 'admin@prompthive.com';
-  const adminPass  = process.env.ADMIN_PASS  || 'Admin@12345';
+  const adminEmail = process.env.ADMIN_EMAIL || 'admin@gmail.com';
+  const adminPass  = process.env.ADMIN_PASS  || 'Admin@1234';
 
   const exists = await users.findOne({ email: adminEmail });
   if (exists) {

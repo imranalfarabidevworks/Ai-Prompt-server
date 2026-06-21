@@ -13,9 +13,9 @@ async function seed() {
   const users = db.collection('users');
 
   const demos = [
-    { name: 'Admin',   email: 'admin@prompthive.com',   password: 'Admin@12345',   role: 'admin',   isPremium: true },
-    { name: 'Creator', email: 'creator@prompthive.com', password: 'Creator@12345', role: 'creator', isPremium: true },
-    { name: 'User',    email: 'user@prompthive.com',    password: 'User@12345',    role: 'user',    isPremium: false },
+    { name: 'Admin',   email: 'admin@gmail.com',   password: 'Admin@1234',   role: 'admin',   isPremium: true },
+    { name: 'Creator', email: 'creator@gmail.com', password: 'Creator@1234', role: 'creator', isPremium: true },
+    { name: 'User',    email: 'user@gmail.com',    password: 'User@1234',    role: 'user',    isPremium: false },
   ];
 
   for (const demo of demos) {

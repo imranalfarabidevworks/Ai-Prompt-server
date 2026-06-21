@@ -13,8 +13,7 @@ const app = express();
 const port = process.env.PORT || 5000;
 
 const allowedOrigins = [
-  process.env.CLIENT_URL || 'http://localhost:3000',
-  'https://prompthive.vercel.app',
+  process.env.CLIENT_URL ||'https://ai-prompt-client.vercel.app/',
 ];
 app.use(cors({ origin: allowedOrigins, credentials: true }));
 app.use(express.json());
