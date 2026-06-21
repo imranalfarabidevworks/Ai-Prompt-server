@@ -1,4 +1,4 @@
-// const dns = require('node:dns');
+const dns = require('node:dns');
 const express = require('express');
 const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 require('dotenv').config();
@@ -7,7 +7,7 @@ const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const cookieParser = require('cookie-parser');
 
-// dns.setServers(['8.8.8.8', '8.8.4.4']);
+ dns.setServers(['8.8.8.8', '8.8.4.4']);
 
 const app = express();
 const port = process.env.PORT || 5000;
