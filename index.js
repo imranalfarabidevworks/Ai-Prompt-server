@@ -181,7 +181,7 @@ async function run() {
       const query = oid ? { $or: [{ _id: oid }, { _id: req.params.id }] } : { _id: req.params.id };
       const prompt = await promptsCol.findOne(oid ? { _id: oid } : { _id: req.params.id });
       if (!prompt) return res.status(404).json({ message: 'Prompt not found' });
-      // reviews store করা হয় promptId = string হিসেবে
+      // reviews store 
       const reviews = await reviewsCol.find({ promptId: req.params.id }).sort({ createdAt: -1 }).limit(20).toArray();
       res.json({ ...prompt, _id: prompt._id.toString(), reviews });
     } catch (err) { res.status(500).json({ message: err.message }); }
@@ -235,7 +235,7 @@ async function run() {
     } catch (err) { res.status(500).json({ message: err.message }); }
   });
 
-  // PATCH copy count
+  
   app.patch('/api/prompts/:id/copy', async (req, res) => {
     try {
       const oid = toObjectId(req.params.id);
@@ -244,7 +244,7 @@ async function run() {
     } catch (err) { res.status(500).json({ message: err.message }); }
   });
 
-  // POST bookmark toggle
+  
   app.post('/api/prompts/:id/bookmark', verifyToken, async (req, res) => {
     try {
       const userOid = toObjectId(req.user._id);
@@ -266,17 +266,17 @@ async function run() {
     } catch (err) { res.status(500).json({ message: err.message }); }
   });
 
-  // POST review ← এটাই fix করা হয়েছে
+  
   app.post('/api/prompts/:id/review', verifyToken, async (req, res) => {
     try {
       const { rating, comment } = req.body;
       if (!rating || !comment) return res.status(400).json({ message: 'Rating and comment required' });
 
-      const promptId = req.params.id; // string হিসেবে রাখো
+      const promptId = req.params.id; 
 
-      // Insert review
+  
       await reviewsCol.insertOne({
-        promptId,              // string id store করো
+        promptId,              
         userId: req.user._id,
         userName: req.user.name,
         userEmail: req.user.email,
@@ -285,13 +285,12 @@ async function run() {
         createdAt: new Date(),
       });
 
-      // MongoDB Aggregation — average rating calculate
+    
       const agg = await reviewsCol.aggregate([
         { $match: { promptId } },
         { $group: { _id: null, avg: { $avg: '$rating' }, count: { $sum: 1 } } },
       ]).toArray();
 
-      // Update prompt rating — ObjectId or string দুটোই try করো
       if (agg.length) {
         const newRating = Math.round(agg[0].avg * 10) / 10;
         const newCount = agg[0].count;
