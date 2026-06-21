@@ -1,37 +1,65 @@
-// Run this once: node seed.js
-// Creates demo admin, creator, user accounts
 require('dotenv').config();
 const { MongoClient } = require('mongodb');
 const bcrypt = require('bcryptjs');
 
-const uri = process.env.MONGODB_URI;
-
 async function seed() {
-  const client = new MongoClient(uri);
+  const client = new MongoClient(process.env.MONGODB_URI);
   await client.connect();
+  console.log('✅ Connected to MongoDB');
+
   const db = client.db('prompthive');
   const users = db.collection('users');
 
   const demos = [
-    { name: 'Admin',   email: 'admin@gmail.com',   password: 'Admin@1234',   role: 'admin',   isPremium: true },
-    { name: 'Creator', email: 'creator@gmail.com', password: 'Creator@1234', role: 'creator', isPremium: true },
-    { name: 'User',    email: 'user@gmail.com',    password: 'User@1234',    role: 'user',    isPremium: false },
+    {
+      name: 'Admin',
+      email: process.env.ADMIN_EMAIL || 'admin@prompthive.com',
+      password: process.env.ADMIN_PASS || 'Admin@12345',
+      role: 'admin',
+      isPremium: true,
+      photoURL: '',
+    },
+    {
+      name: 'Creator',
+      email: 'creator@prompthive.com',
+      password: 'Creator@12345',
+      role: 'creator',
+      isPremium: true,
+      photoURL: '',
+    },
+    {
+      name: 'User',
+      email: 'user@prompthive.com',
+      password: 'User@12345',
+      role: 'user',
+      isPremium: false,
+      photoURL: '',
+    },
   ];
 
   for (const demo of demos) {
+    const hashed = await bcrypt.hash(demo.password, 10);
     const exists = await users.findOne({ email: demo.email });
+
     if (exists) {
-      // Update role if exists
-      await users.updateOne({ email: demo.email }, { $set: { role: demo.role, isPremium: demo.isPremium } });
+      await users.updateOne(
+        { email: demo.email },
+        { $set: { role: demo.role, isPremium: demo.isPremium, password: hashed } }
+      );
       console.log(`✅ Updated: ${demo.email} → role: ${demo.role}`);
     } else {
-      const hashed = await bcrypt.hash(demo.password, 10);
-      await users.insertOne({ ...demo, password: hashed, photoURL: '', bookmarks: [], promptCount: 0, createdAt: new Date() });
+      await users.insertOne({
+        ...demo,
+        password: hashed,
+        bookmarks: [],
+        promptCount: 0,
+        createdAt: new Date(),
+      });
       console.log(`✅ Created: ${demo.email} → role: ${demo.role}`);
     }
   }
 
-  console.log('\n🎉 Seed complete! Demo accounts ready.');
+  console.log('\n🎉 Done! 3 demo accounts ready.');
   await client.close();
 }
 
