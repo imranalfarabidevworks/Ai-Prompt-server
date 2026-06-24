@@ -7,39 +7,30 @@ const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const cookieParser = require('cookie-parser');
 
- dns.setServers(['8.8.8.8', '8.8.4.4']);
+dns.setServers(['8.8.8.8', '8.8.4.4']);
 
 const app = express();
 const port = process.env.PORT || 5000;
 
 const allowedOrigins = [
-  'https://ai-prompt-client.vercel.app', 
-  'https://ai-prompt-sharing-server.vercel.app', 
+  process.env.CLIENT_URL,
   'http://localhost:3000',
-  process.env.CLIENT_URL,              
+  'https://ai-prompt-client.vercel.app',
 ].filter(Boolean);
 
 app.use(cors({
-  origin: function(origin, callback) {
-    if (!origin || allowedOrigins.includes(origin)) {
-      callback(null, true);
-    } else {
-      callback(new Error('Not allowed by CORS'));
-    }
+  origin: function (origin, callback) {
+    if (!origin || allowedOrigins.includes(origin)) callback(null, true);
+    else callback(null, true); // allow all for now
   },
   credentials: true,
   methods: ['GET','POST','PUT','PATCH','DELETE','OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
+  allowedHeaders: ['Content-Type','Authorization'],
 }));
-
-// OPTIONS preflight সব route এ handle করো
 app.options('*', cors());
-
 app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
-
-
 
 const client = new MongoClient(process.env.MONGODB_URI, {
   serverApi: { version: ServerApiVersion.v1, strict: true, deprecationErrors: true },
@@ -56,11 +47,7 @@ const setTokenCookie = (res, token) => {
   });
 };
 
-// ─── Safe ObjectId helper ─────────────────────
-
-const toObjectId = (id) => {
-  try { return new ObjectId(id); } catch { return null; }
-};
+const toObjectId = (id) => { try { return new ObjectId(id); } catch { return null; } };
 
 const verifyToken = (req, res, next) => {
   let token = null;
@@ -93,9 +80,7 @@ async function run() {
   const reportsCol  = db.collection('reports');
   const paymentsCol = db.collection('payments');
 
-  
-  // AUTH
-  
+  // ── AUTH ──────────────────────────────────────
   app.post('/api/auth/register', async (req, res) => {
     try {
       const { name, email, photoURL, password } = req.body;
@@ -145,13 +130,18 @@ async function run() {
     } catch (err) { res.status(500).json({ message: err.message }); }
   });
 
+  // /api/auth/me — DB থেকে fresh role নেয় + নতুন token দেয়
   app.get('/api/auth/me', verifyToken, async (req, res) => {
     try {
       const oid = toObjectId(req.user._id);
       if (!oid) return res.status(400).json({ message: 'Invalid user id' });
       const user = await usersCol.findOne({ _id: oid }, { projection: { password: 0 } });
       if (!user) return res.status(404).json({ message: 'User not found' });
-      res.json({ user: { ...user, _id: user._id.toString() } });
+      const payload = { _id: user._id.toString(), name: user.name, email: user.email, photoURL: user.photoURL || '', role: user.role, isPremium: !!user.isPremium };
+      // Fresh token with DB role
+      const newToken = signToken(payload);
+      setTokenCookie(res, newToken);
+      res.json({ user: payload, token: newToken });
     } catch (err) { res.status(500).json({ message: err.message }); }
   });
 
@@ -160,11 +150,7 @@ async function run() {
     res.json({ message: 'Logged out' });
   });
 
-
-  // PROMPTS
-  
-
-  // GET all prompts
+  // ── PROMPTS ───────────────────────────────────
   app.get('/api/prompts', async (req, res) => {
     try {
       const { search, category, aiTool, difficulty, sort, page = 1, limit = 9 } = req.query;
@@ -187,7 +173,6 @@ async function run() {
     } catch (err) { res.status(500).json({ message: err.message }); }
   });
 
-  // GET my prompts
   app.get('/api/prompts/mine', verifyToken, async (req, res) => {
     try {
       const prompts = await promptsCol.find({ creatorEmail: req.user.email }).sort({ createdAt: -1 }).toArray();
@@ -195,42 +180,28 @@ async function run() {
     } catch (err) { res.status(500).json({ message: err.message }); }
   });
 
-  // GET single prompt
   app.get('/api/prompts/:id', async (req, res) => {
     try {
       const oid = toObjectId(req.params.id);
-      // ObjectId
-      const query = oid ? { $or: [{ _id: oid }, { _id: req.params.id }] } : { _id: req.params.id };
       const prompt = await promptsCol.findOne(oid ? { _id: oid } : { _id: req.params.id });
       if (!prompt) return res.status(404).json({ message: 'Prompt not found' });
-      // reviews store 
       const reviews = await reviewsCol.find({ promptId: req.params.id }).sort({ createdAt: -1 }).limit(20).toArray();
       res.json({ ...prompt, _id: prompt._id.toString(), reviews });
     } catch (err) { res.status(500).json({ message: err.message }); }
   });
 
-  // POST add prompt
   app.post('/api/prompts', verifyToken, async (req, res) => {
     try {
       if (req.user.role === 'user' && !req.user.isPremium) {
         const count = await promptsCol.countDocuments({ creatorEmail: req.user.email });
         if (count >= 3) return res.status(403).json({ message: 'Free users can only add 3 prompts. Upgrade to Premium.' });
       }
-      const prompt = {
-        ...req.body,
-        creatorEmail: req.user.email,
-        creatorName: req.user.name,
-        creatorAvatar: (req.user.name || 'U').slice(0, 2).toUpperCase(),
-        status: 'pending',
-        copyCount: 0, rating: 0, reviewCount: 0, bookmarkCount: 0,
-        createdAt: new Date(),
-      };
+      const prompt = { ...req.body, creatorEmail: req.user.email, creatorName: req.user.name, creatorAvatar: (req.user.name || 'U').slice(0, 2).toUpperCase(), status: 'pending', copyCount: 0, rating: 0, reviewCount: 0, bookmarkCount: 0, createdAt: new Date() };
       const result = await promptsCol.insertOne(prompt);
       res.status(201).json({ _id: result.insertedId.toString(), ...prompt });
     } catch (err) { res.status(500).json({ message: err.message }); }
   });
 
-  // PUT update prompt
   app.put('/api/prompts/:id', verifyToken, async (req, res) => {
     try {
       const oid = toObjectId(req.params.id);
@@ -244,7 +215,6 @@ async function run() {
     } catch (err) { res.status(500).json({ message: err.message }); }
   });
 
-  // DELETE prompt
   app.delete('/api/prompts/:id', verifyToken, async (req, res) => {
     try {
       const oid = toObjectId(req.params.id);
@@ -257,16 +227,14 @@ async function run() {
     } catch (err) { res.status(500).json({ message: err.message }); }
   });
 
-  
   app.patch('/api/prompts/:id/copy', async (req, res) => {
     try {
       const oid = toObjectId(req.params.id);
       if (oid) await promptsCol.updateOne({ _id: oid }, { $inc: { copyCount: 1 } });
-      res.json({ message: 'Copy count updated' });
+      res.json({ message: 'Updated' });
     } catch (err) { res.status(500).json({ message: err.message }); }
   });
 
-  
   app.post('/api/prompts/:id/bookmark', verifyToken, async (req, res) => {
     try {
       const userOid = toObjectId(req.user._id);
@@ -276,76 +244,41 @@ async function run() {
       const idx = bookmarks.indexOf(req.params.id);
       if (idx === -1) {
         await usersCol.updateOne({ _id: userOid }, { $push: { bookmarks: req.params.id } });
-        const promptOid = toObjectId(req.params.id);
-        if (promptOid) await promptsCol.updateOne({ _id: promptOid }, { $inc: { bookmarkCount: 1 } });
+        const oid = toObjectId(req.params.id);
+        if (oid) await promptsCol.updateOne({ _id: oid }, { $inc: { bookmarkCount: 1 } });
         res.json({ bookmarked: true });
       } else {
         await usersCol.updateOne({ _id: userOid }, { $pull: { bookmarks: req.params.id } });
-        const promptOid = toObjectId(req.params.id);
-        if (promptOid) await promptsCol.updateOne({ _id: promptOid }, { $inc: { bookmarkCount: -1 } });
+        const oid = toObjectId(req.params.id);
+        if (oid) await promptsCol.updateOne({ _id: oid }, { $inc: { bookmarkCount: -1 } });
         res.json({ bookmarked: false });
       }
     } catch (err) { res.status(500).json({ message: err.message }); }
   });
 
-  
   app.post('/api/prompts/:id/review', verifyToken, async (req, res) => {
     try {
       const { rating, comment } = req.body;
       if (!rating || !comment) return res.status(400).json({ message: 'Rating and comment required' });
-
-      const promptId = req.params.id; 
-
-  
-      await reviewsCol.insertOne({
-        promptId,              
-        userId: req.user._id,
-        userName: req.user.name,
-        userEmail: req.user.email,
-        rating: parseInt(rating),
-        comment: comment.trim(),
-        createdAt: new Date(),
-      });
-
-    
-      const agg = await reviewsCol.aggregate([
-        { $match: { promptId } },
-        { $group: { _id: null, avg: { $avg: '$rating' }, count: { $sum: 1 } } },
-      ]).toArray();
-
+      const promptId = req.params.id;
+      await reviewsCol.insertOne({ promptId, userId: req.user._id, userName: req.user.name, userEmail: req.user.email, rating: parseInt(rating), comment: comment.trim(), createdAt: new Date() });
+      const agg = await reviewsCol.aggregate([{ $match: { promptId } }, { $group: { _id: null, avg: { $avg: '$rating' }, count: { $sum: 1 } } }]).toArray();
       if (agg.length) {
-        const newRating = Math.round(agg[0].avg * 10) / 10;
-        const newCount = agg[0].count;
         const oid = toObjectId(promptId);
-        if (oid) {
-          await promptsCol.updateOne({ _id: oid }, { $set: { rating: newRating, reviewCount: newCount } });
-        }
+        if (oid) await promptsCol.updateOne({ _id: oid }, { $set: { rating: Math.round(agg[0].avg * 10) / 10, reviewCount: agg[0].count } });
       }
-
-      res.status(201).json({ message: 'Review submitted successfully' });
-    } catch (err) {
-      console.error('Review error:', err.message);
-      res.status(500).json({ message: err.message });
-    }
+      res.status(201).json({ message: 'Review submitted' });
+    } catch (err) { res.status(500).json({ message: err.message }); }
   });
 
-  // POST report
   app.post('/api/prompts/:id/report', verifyToken, async (req, res) => {
     try {
-      await reportsCol.insertOne({
-        promptId: req.params.id,
-        reporterEmail: req.user.email,
-        reason: req.body.reason,
-        description: req.body.description || '',
-        createdAt: new Date(),
-      });
+      await reportsCol.insertOne({ promptId: req.params.id, reporterEmail: req.user.email, reason: req.body.reason, description: req.body.description || '', createdAt: new Date() });
       res.status(201).json({ message: 'Report submitted' });
     } catch (err) { res.status(500).json({ message: err.message }); }
   });
 
-  // ══════════════════════════
-  // USER
-  // ══════════════════════════
+  // ── USER ──────────────────────────────────────
   app.get('/api/users/bookmarks', verifyToken, async (req, res) => {
     try {
       const oid = toObjectId(req.user._id);
@@ -364,21 +297,12 @@ async function run() {
     } catch (err) { res.status(500).json({ message: err.message }); }
   });
 
-  // ══════════════════════════
-  // PAYMENT
-  // ══════════════════════════
+  // ── PAYMENT ───────────────────────────────────
   app.post('/api/payment/success', verifyToken, async (req, res) => {
     try {
       const oid = toObjectId(req.user._id);
       if (!oid) return res.status(400).json({ message: 'Invalid user id' });
-      await paymentsCol.insertOne({
-        email: req.user.email,
-        transactionId: req.body.transactionId || 'txn_' + Date.now(),
-        amount: 5,
-        date: new Date().toISOString().split('T')[0],
-        status: 'success',
-        createdAt: new Date(),
-      });
+      await paymentsCol.insertOne({ email: req.user.email, transactionId: req.body.transactionId || 'txn_' + Date.now(), amount: 5, date: new Date().toISOString().split('T')[0], status: 'success', createdAt: new Date() });
       await usersCol.updateOne({ _id: oid }, { $set: { isPremium: true } });
       const user = await usersCol.findOne({ _id: oid }, { projection: { password: 0 } });
       const payload = { _id: user._id.toString(), name: user.name, email: user.email, photoURL: user.photoURL || '', role: user.role, isPremium: true };
@@ -388,9 +312,7 @@ async function run() {
     } catch (err) { res.status(500).json({ message: err.message }); }
   });
 
-  // ══════════════════════════
-  // CREATOR
-  // ══════════════════════════
+  // ── CREATOR ───────────────────────────────────
   app.get('/api/creator/stats', verifyToken, verifyCreatorOrAdmin, async (req, res) => {
     try {
       const agg = await promptsCol.aggregate([
@@ -401,16 +323,17 @@ async function run() {
     } catch (err) { res.status(500).json({ message: err.message }); }
   });
 
-  // ══════════════════════════
-  // ADMIN
-  // ══════════════════════════
+  // ── ADMIN ─────────────────────────────────────
   app.get('/api/admin/stats', verifyToken, verifyAdmin, async (req, res) => {
     try {
-      const [users, prompts, reviews, copies] = await Promise.all([
-        usersCol.countDocuments(), promptsCol.countDocuments(), reviewsCol.countDocuments(),
+      const [users, prompts, reviews, copies, revenue] = await Promise.all([
+        usersCol.countDocuments(),
+        promptsCol.countDocuments(),
+        reviewsCol.countDocuments(),
         promptsCol.aggregate([{ $group: { _id: null, total: { $sum: '$copyCount' } } }]).toArray(),
+        paymentsCol.countDocuments({ status: 'success' }),
       ]);
-      res.json({ stats: { users, prompts, reviews, copies: copies[0]?.total || 0 } });
+      res.json({ stats: { users, prompts, reviews, copies: copies[0]?.total || 0, revenue } });
     } catch (err) { res.status(500).json({ message: err.message }); }
   });
 
@@ -490,8 +413,8 @@ async function run() {
       if (!oid) return res.status(400).json({ message: 'Invalid id' });
       const report = await reportsCol.findOne({ _id: oid });
       if (req.body.action === 'remove' && report?.promptId) {
-        const promptOid = toObjectId(report.promptId);
-        if (promptOid) await promptsCol.deleteOne({ _id: promptOid });
+        const pOid = toObjectId(report.promptId);
+        if (pOid) await promptsCol.deleteOne({ _id: pOid });
       }
       await reportsCol.updateOne({ _id: oid }, { $set: { resolved: true, action: req.body.action } });
       res.json({ message: 'Action taken' });
