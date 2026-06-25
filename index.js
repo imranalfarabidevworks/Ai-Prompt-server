@@ -31,7 +31,7 @@ app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
 
-// MongoDB — single connection reuse for serverless
+// MongoDB 
 let cachedClient = null;
 let cachedDb = null;
 
@@ -80,10 +80,10 @@ const verifyCreatorOrAdmin = (req, res, next) => {
   next();
 };
 
-// ── HEALTH ────────────────────────────────────
+// --HEALTH--
 app.get('/', (req, res) => res.json({ status: '✅ PromptHive server running' }));
 
-// ── AUTH ──────────────────────────────────────
+// -- AUTH --
 app.post('/api/auth/register', async (req, res) => {
   try {
     const { db } = await connectDB();
@@ -160,7 +160,7 @@ app.post('/api/auth/logout', (req, res) => {
   res.json({ message: 'Logged out' });
 });
 
-// ── PROMPTS ───────────────────────────────────
+// --PROMPTS --
 app.get('/api/prompts', async (req, res) => {
   try {
     const { db } = await connectDB();
@@ -308,7 +308,7 @@ app.post('/api/prompts/:id/report', verifyToken, async (req, res) => {
   } catch (err) { res.status(500).json({ message: err.message }); }
 });
 
-// ── USER ──────────────────────────────────────
+// -- USER --
 app.get('/api/users/bookmarks', verifyToken, async (req, res) => {
   try {
     const { db } = await connectDB();
@@ -329,7 +329,7 @@ app.get('/api/users/reviews', verifyToken, async (req, res) => {
   } catch (err) { res.status(500).json({ message: err.message }); }
 });
 
-// ── PAYMENT ───────────────────────────────────
+// -- PAYMENT ---
 app.post('/api/payment/success', verifyToken, async (req, res) => {
   try {
     const { db } = await connectDB();
@@ -345,7 +345,7 @@ app.post('/api/payment/success', verifyToken, async (req, res) => {
   } catch (err) { res.status(500).json({ message: err.message }); }
 });
 
-// ── CREATOR ───────────────────────────────────
+// -- CREATOR --
 app.get('/api/creator/stats', verifyToken, verifyCreatorOrAdmin, async (req, res) => {
   try {
     const { db } = await connectDB();
@@ -357,7 +357,7 @@ app.get('/api/creator/stats', verifyToken, verifyCreatorOrAdmin, async (req, res
   } catch (err) { res.status(500).json({ message: err.message }); }
 });
 
-// ── ADMIN ─────────────────────────────────────
+// -- ADMIN --
 app.get('/api/admin/stats', verifyToken, verifyAdmin, async (req, res) => {
   try {
     const { db } = await connectDB();
