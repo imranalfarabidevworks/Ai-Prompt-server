@@ -1,7 +1,8 @@
 require('dotenv').config();
 const { MongoClient } = require('mongodb');
 const bcrypt = require('bcryptjs');
-
+const dns = require('node:dns');
+dns.setServers(['8.8.8.8', '8.8.4.4']);
 async function seed() {
   const client = new MongoClient(process.env.MONGODB_URI);
   await client.connect();

@@ -1,4 +1,3 @@
-
 const dns = require('node:dns');
 const express = require('express');
 const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
@@ -478,4 +477,3 @@ if (require.main === module) {
   const port = process.env.PORT || 5000;
   app.listen(port, () => console.log(`🚀 Server running on port ${port}`));
 }
-
